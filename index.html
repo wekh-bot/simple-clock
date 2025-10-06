@@ -1,40 +1,186 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>极简时钟</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#000000">
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            font-family: 'Arial', sans-serif;
-            background: #000;
-            color: #0f0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-        }
-        #clock {
-            font-size: 25vw;
-            font-weight: bold;
-            font-family: 'Courier New', monospace;
-        }
-        @media (orientation: landscape) {
-            #clock { font-size: 25vh; }
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>北京时间</title>
+
+<!-- Favicon: 圆角矩形钟表，中间加长指针 -->
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,
+<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'>
+  <rect width='64' height='64' rx='12' ry='12' fill='black' stroke='white' stroke-width='2'/>
+  <line x1='32' y1='32' x2='32' y2='12' stroke='white' stroke-width='3' stroke-linecap='round'/>
+  <line x1='32' y1='32' x2='52' y2='32' stroke='white' stroke-width='2' stroke-linecap='round'/>
+  <circle cx='32' cy='32' r='2' fill='white'/>
+</svg>">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+    font-family:"Noto Sans SC",sans-serif;
+    background:#000;
+    color:#ccc; /* 浅灰色文字 */
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    padding:10px;
+}
+.date{
+    font-size:8vw; /* 放大日期字体 */
+    margin-bottom:2vh;
+    font-weight:500;
+    text-align:center;
+}
+.time{
+    font-size:22vw; /* 放大时间字体 */
+    font-weight:700;
+    margin-bottom:3vh;
+    text-align:center;
+}
+.week{
+    font-size:6vw; /* 放大星期字体 */
+    color:#bbb;
+    margin-bottom:5vh;
+    text-align:center;
+}
+.footer{
+    position:fixed;
+    bottom:20px;
+    width:100%;
+    text-align:center;
+    font-size:4.5vw;
+    color:#888;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:10px;
+}
+.dot{width:12px;height:12px;border-radius:50%;background:#666;transition:.3s}
+
+@media(min-width:768px){
+    .date{font-size:3.5rem}
+    .time{font-size:12rem}
+    .week{font-size:3rem}
+    .footer{font-size:1.5rem}
+}
+
+@media (orientation: portrait) {
+    .date {
+        font-size: 10vw;
+    }
+    .time {
+        font-size: 25vw;
+    }
+    .week {
+        font-size: 7vw;
+    }
+    .footer {
+        font-size: 5vw;
+    }
+}
+
+@media (orientation: landscape) {
+    .date {
+        font-size: 6vw;
+    }
+    .time {
+        font-size: 18vw;
+    }
+    .week {
+        font-size: 5vw;
+    }
+    .footer {
+        font-size: 3.5vw;
+    }
+}
+</style>
 </head>
 <body>
-    <div id="clock">--:--:--</div>
+<div class="date" id="date">加载中...</div>
+<div class="time" id="time">--:--:--</div>
+<div class="week" id="week"></div>
+<div class="footer"><div class="dot" id="dot"></div><span id="src">加载中...</span></div>
 
-    <script>
-        function updateClock() {
-            const now = new Date();
+<script>
+const SUNING='https://quan.suning.com/getSysTime.do';
+const CACHE_KEY='suning_cache_v1';
+const CACHE_MAX_AGE=10*60*1000;
+const dEl=document.getElementById('date'),
+      tEl=document.getElementById('time'),
+      wEl=document.getElementById('week'),
+      dot=document.getElementById('dot'),
+      srcEl=document.getElementById('src');
+
+let networkOffset=0;
+setDot(false);
+
+function setDot(on){ dot.style.background = on?'#0f0':'#666'; }
+function saveCache(sysTime2){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({s: sysTime2, ts: Date.now()})); }catch{} }
+function loadCache(){ try{ const raw=localStorage.getItem(CACHE_KEY); return raw?JSON.parse(raw):null; }catch{return null;} }
+async function fetchSuning(retries=3,delay=600){
+  for(let i=0;i<retries;i++){
+    try{
+      const r=await fetch(SUNING,{cache:'no-store'}); if(!r.ok) throw 0;
+      const j=await r.json(); if(j?.sysTime2) return j.sysTime2;
+    }catch{} if(i<retries-1) await new Promise(r=>setTimeout(r,delay));
+  }
+  throw new Error('fetch fail');
+}
+
+async function initTime(){
+  const cache=loadCache();
+  if(cache && Date.now()-cache.ts<CACHE_MAX_AGE){
+    networkOffset = new Date(cache.s.replace(/-/g,'/')).getTime() - Date.now();
+    setDot(true);
+    srcEl.textContent=`时间来源：苏宁（缓存）`;
+  } else {
+    networkOffset = 0;
+    setDot(false);
+    srcEl.textContent=`时间来源：本地时间`;
+  }
+  try{
+    const sys=await fetchSuning();
+    networkOffset = new Date(sys.replace(/-/g,'/')).getTime() - Date.now();
+    setDot(true);
+    srcEl.textContent=`时间来源：苏宁（网络）`;
+    saveCache(sys);
+  }catch{}
+}
+
+function tick(){
+  const now = Date.now() + networkOffset;
+  const displayTime = new Date(now);
+  const y=displayTime.getFullYear(), m=displayTime.getMonth()+1, d=displayTime.getDate();
+  const hh=displayTime.getHours().toString().padStart(2,'0'),
+        mm=displayTime.getMinutes().toString().padStart(2,'0'),
+        ss=displayTime.getSeconds().toString().padStart(2,'0');
+  const weekday=['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][displayTime.getDay()];
+  dEl.textContent=`${y}年${m}月${d}日`;
+  tEl.textContent=`${hh}:${mm}:${ss}`;
+  wEl.textContent=weekday;
+}
+
+async function periodicSync(){
+  try{
+    const sys=await fetchSuning();
+    networkOffset = new Date(sys.replace(/-/g,'/')).getTime() - Date.now();
+    setDot(true);
+    srcEl.textContent=`时间来源：苏宁（网络）`;
+    saveCache(sys);
+  }catch{}
+}
+
+(async function(){
+  tick(); setInterval(tick,1000);
+  await initTime();
+  setInterval(periodicSync,5*60*1000);
+})();
+</script>
+</body>
+</html>            const now = new Date();
             const timeString = now.toLocaleTimeString('zh-CN', { 
                 hour12: false,
                 hour: '2-digit',
