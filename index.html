@@ -7,7 +7,7 @@
 
 <!-- Favicon: 圆角矩形钟表，中间加长指针 -->
 <link rel="icon" type="image/x-icon" href="favicon.ico">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,  
 <svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'>
   <rect width='64' height='64' rx='12' ry='12' fill='black' stroke='white' stroke-width='2'/>
   <line x1='32' y1='32' x2='32' y2='12' stroke='white' stroke-width='3' stroke-linecap='round'/>
@@ -27,6 +27,7 @@ body{
     align-items:center;
     height:100vh;
     padding:10px;
+    overflow:hidden; /* 避免溢出 */
 }
 .date{
     font-size:8vw; /* 放大日期字体 */
@@ -35,6 +36,129 @@ body{
     text-align:center;
 }
 .time{
+    font-size:22vw; /* 放大时间字体 */
+    font-weight:700;
+    margin-bottom:3vh;
+    text-align:center;
+}
+.week{
+    font-size:6vw; /* 放大星期字体 */
+    color:#bbb;
+    margin-bottom:5vh;
+    text-align:center;
+}
+.footer{
+    position:fixed;
+    bottom:20px;
+    width:100%;
+    text-align:center;
+    font-size:4.5vw;
+    color:#888;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:10px;
+}
+.dot{width:12px;height:12px;border-radius:50%;background:#666;transition:.3s}
+
+@media(min-width:768px){
+    .date{font-size:3.5rem}
+    .time{font-size:12rem}
+    .week{font-size:3rem}
+    .footer{font-size:1.5rem}
+}
+</style>
+
+</head>
+<body>
+<div class="date" id="date">加载中...</div>
+<div class="time" id="time">--:--:--</div>
+<div class="week" id="week"></div>
+<div class="footer"><div class="dot" id="dot"></div><span id="src">加载中...</span></div>
+
+<script>
+const SUNING='https://quan.suning.com/getSysTime.do';
+const CACHE_KEY='suning_cache_v1';
+const CACHE_MAX_AGE=10*60*1000;
+const dEl=document.getElementById('date'),
+      tEl=document.getElementById('time'),
+      wEl=document.getElementById('week'),
+      dot=document.getElementById('dot'),
+      srcEl=document.getElementById('src');
+
+let networkOffset=0;
+setDot(false);
+
+function setDot(on){ dot.style.background = on?'#0f0':'#666'; }
+function saveCache(sysTime2){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({s: sysTime2, ts: Date.now()})); }catch{} }
+function loadCache(){ try{ const raw=localStorage.getItem(CACHE_KEY); return raw?JSON.parse(raw):null; }catch{return null;} }
+
+async function fetchSuning(retries=3,delay=600){
+  for(let i=0;i<retries;i++){
+    try{
+      const r=await fetch(SUNING,{cache:'no-store'}); if(!r.ok) throw 0;
+      const j=await r.json(); if(j?.sysTime2) return j.sysTime2;
+    }catch{} if(i<retries-1) await new Promise(r=>setTimeout(r,delay));
+  }
+  throw new Error('fetch fail');
+}
+
+async function initTime(){
+  const cache=loadCache();
+  if(cache && Date.now()-cache.ts<CACHE_MAX_AGE){
+    networkOffset = new Date(cache.s.replace(/-/g,'/')).getTime() - Date.now();
+    setDot(true);
+    srcEl.textContent=`时间来源：苏宁（缓存）`;
+  } else {
+    networkOffset = 0;
+    setDot(false);
+    srcEl.textContent=`时间来源：本地时间`;
+  }
+  try{
+    const sys=await fetchSuning();
+    networkOffset = new Date(sys.replace(/-/g,'/')).getTime() - Date.now();
+    setDot(true);
+    srcEl.textContent=`时间来源：苏宁（网络）`;
+    saveCache(sys);
+  }catch{}
+}
+
+function tick(){
+  const now = Date.now() + networkOffset;
+  const displayTime = new Date(now);
+  const y=displayTime.getFullYear(), m=displayTime.getMonth()+1, d=displayTime.getDate();
+  const hh=displayTime.getHours().toString().padStart(2,'0'),
+        mm=displayTime.getMinutes().toString().padStart(2,'0'),
+        ss=displayTime.getSeconds().toString().padStart(2,'0');
+  const weekday=['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][displayTime.getDay()];
+  dEl.textContent=`${y}年${m}月${d}日`;
+  tEl.textContent=`${hh}:${mm}:${ss}`;
+  wEl.textContent=weekday;
+}
+
+async function periodicSync(){
+  try{
+    const sys=await fetchSuning();
+    networkOffset = new Date(sys.replace(/-/g,'/')).getTime() - Date.now();
+    setDot(true);
+    srcEl.textContent=`时间来源：苏宁（网络）`;
+    saveCache(sys);
+  }catch{}
+}
+
+// 调整窗口大小时重新设置布局
+window.addEventListener('resize', function() {
+  document.body.style.fontSize = (window.innerWidth < 768) ? '4vw' : '2rem';
+});
+
+(async function(){
+  tick(); setInterval(tick,1000);
+  await initTime();
+  setInterval(periodicSync,5*60*1000);
+})();
+</script>
+</body>
+</html>.time{
     font-size:22vw; /* 放大时间字体 */
     font-weight:700;
     margin-bottom:3vh;
