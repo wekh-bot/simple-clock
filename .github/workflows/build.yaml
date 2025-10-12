@@ -1,4 +1,4 @@
-name: Build Signed APK with Secrets
+name: Build Auto-signed APK
 on: [push]
 jobs:
   build:
@@ -6,45 +6,33 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     
-    - name: Setup Java
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '11'
+    - name: Setup environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y default-jdk nodejs npm keytool
         
-    - name: Install Bubblewrap
+    - name: Install and build with auto-signing
       run: |
         npm install -g @bubblewrap/cli
         
-    - name: Restore signing key
-      run: |
-        echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > my-release-key.jks
+        # 自动生成签名密钥
+        keytool -genkey -noprompt \
+          -keystore mykey.jks \
+          -alias mykey \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -storepass 123456 \
+          -keypass 123456 \
+          -dname "CN=Beijing Time, OU=Android, O=Wekh, C=CN"
         
-    - name: Initialize and build
-      run: |
-        echo '{
-          "packageId": "com.beijing.time",
-          "appVersionName": "1.0.0", 
-          "appVersionCode": 1,
-          "host": "time.wekh.eu.org",
-          "startUrl": "/",
-          "name": "北京时间",
-          "launcherName": "北京时间",
-          "display": "standalone",
-          "themeColor": "#1a2a6c",
-          "backgroundColor": "#1a2a6c",
-          "enableNotifications": false,
-          "webManifestUrl": "https://time.wekh.eu.org/manifest.json",
-          "applicationId": "com.beijing.time",
-          "appVersion": "1.0.0"
-        }' > config.json
-        
-        bubblewrap init --manifest=https://time.wekh.eu.org/manifest.json --non-interactive --config=config.json
+        # 初始化并构建
+        bubblewrap init --manifest=https://time.wekh.eu.org/manifest.json --non-interactive
         cd $(ls -d */ | head -n 1)
-        bubblewrap build --jks=../my-release-key.jks --alias=${{ secrets.KEY_ALIAS }} --key-pass=${{ secrets.KEY_PASSWORD }} --store-pass=${{ secrets.KEYSTORE_PASSWORD }}
+        bubblewrap build --jks=../mykey.jks --alias=mykey --key-pass=123456 --store-pass=123456
         
     - name: Upload APK
       uses: actions/upload-artifact@v3
       with:
-        name: beijing-time-signed-apk
+        name: beijing-time-app
         path: "*/app-release-signed.apk"
