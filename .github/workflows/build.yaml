@@ -1,0 +1,50 @@
+name: Build Signed APK with Secrets
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+        
+    - name: Install Bubblewrap
+      run: |
+        npm install -g @bubblewrap/cli
+        
+    - name: Restore signing key
+      run: |
+        echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > my-release-key.jks
+        
+    - name: Initialize and build
+      run: |
+        echo '{
+          "packageId": "com.beijing.time",
+          "appVersionName": "1.0.0", 
+          "appVersionCode": 1,
+          "host": "time.wekh.eu.org",
+          "startUrl": "/",
+          "name": "北京时间",
+          "launcherName": "北京时间",
+          "display": "standalone",
+          "themeColor": "#1a2a6c",
+          "backgroundColor": "#1a2a6c",
+          "enableNotifications": false,
+          "webManifestUrl": "https://time.wekh.eu.org/manifest.json",
+          "applicationId": "com.beijing.time",
+          "appVersion": "1.0.0"
+        }' > config.json
+        
+        bubblewrap init --manifest=https://time.wekh.eu.org/manifest.json --non-interactive --config=config.json
+        cd $(ls -d */ | head -n 1)
+        bubblewrap build --jks=../my-release-key.jks --alias=${{ secrets.KEY_ALIAS }} --key-pass=${{ secrets.KEY_PASSWORD }} --store-pass=${{ secrets.KEYSTORE_PASSWORD }}
+        
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: beijing-time-signed-apk
+        path: "*/app-release-signed.apk"
