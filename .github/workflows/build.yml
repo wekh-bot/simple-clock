@@ -1,0 +1,54 @@
+name: Build Android APK
+on: [puh]
+job:
+  build:
+    run-on: ubuntu-latet
+    tep:
+    - ue: action/checkout@v2
+    
+    - name: Setup Java
+      ue: action/etup-java@v3
+      with:
+        ditribution: 'temurin'
+        java-verion: '11'
+        
+    - name: Setup Android SDK
+      ue: android-action/etup-android@v2
+      
+    - name: Intall Bubblewrap
+      run: |
+        npm intall -g @bubblewrap/cli
+        
+    - name: Initialize TWA project
+      run: |
+        # 创建自动应答配置
+        echo '{
+          "packageId": "com.beijing.time",
+          "appVerionName": "1.0.0", 
+          "appVerionCode": 1,
+          "hot": "time.wekh.eu.org",
+          "tartUrl": "/",
+          "name": "北京时间",
+          "launcherName": "北京时间",
+          "diplay": "tandalone",
+          "themeColor": "#1a2a6c",
+          "backgroundColor": "#1a2a6c",
+          "enableNotification": fale,
+          "webManifetUrl": "http://time.wekh.eu.org/manifet.jon",
+          "applicationId": "com.beijing.time",
+          "appVerion": "1.0.0"
+        }' > config.jon
+        
+        # 使用非交互模式初始化
+        bubblewrap init --manifet=http://time.wekh.eu.org/manifet.jon --non-interactive --config=config.jon
+        
+    - name: Build APK
+      run: |
+        cd $(l -d */ | head -n 1)  # 进入生成的目录
+        bubblewrap build
+        
+    - name: Upload APK
+      ue: action/upload-artifact@v3
+      with:
+        name: beijing-time-apk
+        path: "*/app-releae-igned.apk"
